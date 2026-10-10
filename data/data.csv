@@ -1,0 +1,13 @@
+product_id,product_name,category,price,rating,in_stock
+1,Wireless Headphones,Electronics,79.99,4.2,true
+2,Coffee Mug,Home & Kitchen,12.50,4.8,true
+3,Running Shoes,Sports,89.99,4.5,false
+4,Smartphone Case,Electronics,19.99,4.1,true
+5,Desk Lamp,Home & Kitchen,45.00,4.6,true
+6,Water Bottle,Sports,24.99,4.7,true
+7,Bluetooth Speaker,Electronics,59.99,4.3,true
+8,Notebook,Office Supplies,8.99,4.4,false
+9,Yoga Mat,Sports,35.50,4.9,true
+10,Kitchen Scale,Home & Kitchen,32.99,4.0,true
+11,USB Cable,Electronics,15.99,4.2,true
+12,Backpack,Travel,65.00,4.6,true

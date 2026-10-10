@@ -1,0 +1,353 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "databaseId": {
+          "__rl": true,
+          "value": "30f8aac9-8ced-8045-b6a2-e22cac47c080",
+          "mode": "list",
+          "cachedResultName": "Blog Management",
+          "cachedResultUrl": "https://www.notion.so/30f8aac98ced8045b6a2e22cac47c080"
+        }
+      },
+      "type": "n8n-nodes-base.notionTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2256,
+        -160
+      ],
+      "id": "aa3d9975-7d6a-4745-9f42-ee3ea283307c",
+      "name": "Notion Trigger",
+      "credentials": {
+        "notionApi": {
+          "id": "pXAV2nJOYvPFucr7",
+          "name": "Blog management"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:2368/ghost/api/admin/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Ghost {{ $json.token }}"
+            },
+            {
+              "name": "Accept-Version",
+              "value": "v6.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        48,
+        -160
+      ],
+      "id": "314cd745-8def-42ae-97c6-fa428e2ba626",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        96
+      ],
+      "id": "fa20ee31-3df4-4e7b-b51b-8a853bdf626e",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "x72uMH5iOetefDXI",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a professional blog writer who specializes in creating engaging, insightful, and valuable long-form content.\n\nWrite a compelling blog post about the following topic:\n\nTopic:\n{{ $json.combined_text }}\n\n## Content Requirements\n\n- Create a powerful, curiosity-driven title.\n- Begin with an engaging introduction that relates the topic to a real-world situation, problem, question, or observation.\n- Structure the article with 3–5 clear sections using descriptive headings.\n- Use examples, explanations, comparisons, and practical insights where appropriate.\n- Write in a friendly, conversational, and informative tone.\n- Make the article easy to read and genuinely useful to the reader.\n- Avoid unnecessary repetition, filler, clichés, and generic statements.\n- Target length: 800–1200 words.\n- End with a thoughtful conclusion that leaves the reader with a useful insight, question, or observation.\n\n## Output Format\n\nReturn ONLY the blog post as plain text.\n\nDo NOT return metadata.\n\nDo NOT return explanations about the article.\n\nDo NOT return labels such as \"Title:\", \"Introduction:\", or \"Conclusion:\".\n\nStart directly with the blog title.\n\nUse this structure:\n\nBlog Title\n\nIntroduction paragraphs...\n\nSection Heading\n\nSection content...\n\nSection Heading\n\nSection content...\n\nSection Heading\n\nSection content...\n\nKey Takeaways\n\n- Takeaway 1\n- Takeaway 2\n- Takeaway 3\n\nConclusion paragraphs...\n\n## Important\n\nThe output must be complete.\n\nDo not stop in the middle of a sentence or paragraph.\n\nDo not truncate the article.\n",
+        "needsFallback": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -1232,
+        -160
+      ],
+      "id": "a4a0cea8-6ea0-46a7-99cc-664965d6281f",
+      "name": "Blog Writer Agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "let contents = [];\n\nfor (const item of items) {\n  const content = item.json.content;\n\n  if (content && content.trim() !== \"\") {\n    contents.push(content.trim());\n  }\n}\n\nconst combinedText = contents.join(\"\\n\\n\");\n\n/*return [\n  {\n    json: {\n      extracted_content: contents,\n      combined_text: combinedText\n    }\n  }\n];\n */\n\nreturn {\n    json: {\n      combined_text: combinedText\n    }\n  };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1616,
+        -160
+      ],
+      "id": "d68ee03d-aef3-468e-b8df-95498021694b",
+      "name": "Note Perser"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// AI OUTPUT → TOLERANT BLOG PARSER → GHOST LEXICAL\n// ============================================================\n\nlet raw = $json.output;\n\n// ------------------------------------------------------------\n// 1. Get AI response\n// ------------------------------------------------------------\n\nif (typeof raw !== \"string\") {\n  // Some AI nodes may return another field depending on configuration\n  raw =\n    $json.text ??\n    $json.content ??\n    $json.response ??\n    \"\";\n\n  if (typeof raw !== \"string\") {\n    raw = String(raw || \"\");\n  }\n}\n\nraw = raw.trim();\n\nif (!raw) {\n  throw new Error(\"AI returned an empty response.\");\n}\n\n\n// ------------------------------------------------------------\n// 2. Remove surrounding Markdown code fences\n// ------------------------------------------------------------\n\nraw = raw\n  .replace(/^```(?:json|markdown|md|text)?\\s*/i, \"\")\n  .replace(/\\s*```$/i, \"\")\n  .trim();\n\n\n// ------------------------------------------------------------\n// 3. Try JSON first\n// ------------------------------------------------------------\n\nlet blog = null;\n\ntry {\n  blog = JSON.parse(raw);\n} catch (error) {\n  // Not JSON.\n  // That's OK — we'll treat it as Markdown/plain text.\n}\n\n\n// ------------------------------------------------------------\n// 4. If JSON was returned, normalize it\n// ------------------------------------------------------------\n\nif (blog && typeof blog === \"object\") {\n\n  // Make sure expected fields exist\n  blog.title = blog.title || \"Untitled Blog\";\n  blog.slug = blog.slug || \"\";\n\n  blog.introduction =\n    typeof blog.introduction === \"string\"\n      ? blog.introduction\n      : \"\";\n\n  blog.sections =\n    Array.isArray(blog.sections)\n      ? blog.sections\n      : [];\n\n  blog.key_takeaways =\n    Array.isArray(blog.key_takeaways)\n      ? blog.key_takeaways\n      : [];\n\n  blog.conclusion =\n    typeof blog.conclusion === \"string\"\n      ? blog.conclusion\n      : \"\";\n\n} else {\n\n  // ----------------------------------------------------------\n  // 5. Not JSON → parse Markdown/plain text\n  // ----------------------------------------------------------\n\n  blog = parseMarkdownBlog(raw);\n}\n\n\n// ============================================================\n// MARKDOWN / PLAIN TEXT PARSER\n// ============================================================\n\nfunction parseMarkdownBlog(text) {\n\n  const lines = text\n    .replace(/\\r\\n/g, \"\\n\")\n    .replace(/\\r/g, \"\\n\")\n    .split(\"\\n\");\n\n  let title = \"\";\n  const bodyLines = [];\n\n  // ----------------------------------------------------------\n  // Find title\n  // ----------------------------------------------------------\n\n  for (let i = 0; i < lines.length; i++) {\n\n    const line = lines[i].trim();\n\n    if (!line) {\n      continue;\n    }\n\n    // # Title\n    if (/^#\\s+/.test(line)) {\n      title = line\n        .replace(/^#\\s+/, \"\")\n        .replace(/\\*\\*/g, \"\")\n        .trim();\n\n      lines.splice(i, 1);\n      break;\n    }\n\n    // **Title**\n    if (/^\\*\\*.+\\*\\*$/.test(line)) {\n      title = line\n        .replace(/^\\*\\*/, \"\")\n        .replace(/\\*\\*$/, \"\")\n        .trim();\n\n      lines.splice(i, 1);\n      break;\n    }\n\n    // Plain first line → title\n    title = line;\n    lines.splice(i, 1);\n    break;\n  }\n\n  // ----------------------------------------------------------\n  // Remaining content\n  // ----------------------------------------------------------\n\n  for (const line of lines) {\n    bodyLines.push(line);\n  }\n\n  if (!title) {\n    title = \"Untitled Blog\";\n  }\n\n  return {\n    title,\n    slug: createSlug(title),\n    markdown: bodyLines.join(\"\\n\").trim()\n  };\n}\n\n\n// ============================================================\n// SLUG\n// ============================================================\n\nfunction createSlug(title) {\n\n  return title\n    .toLowerCase()\n    .normalize(\"NFKD\")\n    .replace(/[^\\w\\s-]/g, \"\")\n    .trim()\n    .replace(/\\s+/g, \"-\")\n    .replace(/-+/g, \"-\");\n}\n\n\n// ============================================================\n// INLINE MARKDOWN → LEXICAL\n// ============================================================\n\nfunction inlineText(text) {\n\n  const children = [];\n\n  // Basic Markdown:\n  // **bold**\n  // *italic*\n  // [link](url)\n\n  const regex =\n    /(\\*\\*(.+?)\\*\\*|\\*(.+?)\\*|\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\))/g;\n\n  let lastIndex = 0;\n  let match;\n\n  while ((match = regex.exec(text)) !== null) {\n\n    // Text before formatting\n    if (match.index > lastIndex) {\n\n      children.push({\n        detail: 0,\n        format: 0,\n        mode: \"normal\",\n        style: \"\",\n        text: text.slice(lastIndex, match.index),\n        type: \"extended-text\",\n        version: 1\n      });\n\n    }\n\n    // Bold\n    if (match[2]) {\n\n      children.push({\n        detail: 0,\n        format: 1,\n        mode: \"normal\",\n        style: \"\",\n        text: match[2],\n        type: \"extended-text\",\n        version: 1\n      });\n\n    }\n\n    // Italic\n    else if (match[3]) {\n\n      children.push({\n        detail: 0,\n        format: 2,\n        mode: \"normal\",\n        style: \"\",\n        text: match[3],\n        type: \"extended-text\",\n        version: 1\n      });\n\n    }\n\n    // Link\n    else if (match[4] && match[5]) {\n\n      children.push({\n        children: [\n          {\n            detail: 0,\n            format: 0,\n            mode: \"normal\",\n            style: \"\",\n            text: match[4],\n            type: \"extended-text\",\n            version: 1\n          }\n        ],\n        direction: \"ltr\",\n        format: \"\",\n        indent: 0,\n        type: \"link\",\n        version: 1,\n        url: match[5],\n        rel: null,\n        target: null\n      });\n\n    }\n\n    lastIndex = regex.lastIndex;\n  }\n\n  // Remaining text\n  if (lastIndex < text.length) {\n\n    children.push({\n      detail: 0,\n      format: 0,\n      mode: \"normal\",\n      style: \"\",\n      text: text.slice(lastIndex),\n      type: \"extended-text\",\n      version: 1\n    });\n\n  }\n\n  if (children.length === 0) {\n\n    children.push({\n      detail: 0,\n      format: 0,\n      mode: \"normal\",\n      style: \"\",\n      text: text,\n      type: \"extended-text\",\n      version: 1\n    });\n\n  }\n\n  return children;\n}\n\n\n// ============================================================\n// LEXICAL HELPERS\n// ============================================================\n\nfunction paragraph(text) {\n\n  return {\n    children: inlineText(text),\n    direction: \"ltr\",\n    format: \"\",\n    indent: 0,\n    type: \"paragraph\",\n    version: 1\n  };\n\n}\n\n\nfunction heading(text, tag = \"h2\") {\n\n  return {\n    children: inlineText(text),\n    direction: \"ltr\",\n    format: \"\",\n    indent: 0,\n    tag,\n    type: \"heading\",\n    version: 1\n  };\n\n}\n\n\nfunction listItem(text) {\n\n  return {\n    children: [\n      paragraph(text)\n    ],\n    direction: \"ltr\",\n    format: \"\",\n    indent: 0,\n    type: \"listitem\",\n    version: 1\n  };\n\n}\n\n\nfunction list(items, ordered = false) {\n\n  return {\n    children: items.map(item => listItem(item)),\n    direction: \"ltr\",\n    format: \"\",\n    indent: 0,\n    type: \"list\",\n    version: 1,\n    listType: ordered ? \"number\" : \"bullet\",\n    start: 1,\n    tag: ordered ? \"ol\" : \"ul\"\n  };\n\n}\n\n\n// ============================================================\n// BUILD LEXICAL FROM MARKDOWN\n// ============================================================\n\nfunction markdownToLexical(markdown) {\n\n  const lines = markdown\n    .replace(/\\r\\n/g, \"\\n\")\n    .replace(/\\r/g, \"\\n\")\n    .split(\"\\n\");\n\n  const children = [];\n\n  let paragraphBuffer = [];\n  let bulletBuffer = [];\n  let numberedBuffer = [];\n\n\n  function flushParagraph() {\n\n    if (paragraphBuffer.length === 0) {\n      return;\n    }\n\n    const text = paragraphBuffer\n      .join(\" \")\n      .trim();\n\n    if (text) {\n      children.push(paragraph(text));\n    }\n\n    paragraphBuffer = [];\n  }\n\n\n  function flushLists() {\n\n    if (bulletBuffer.length > 0) {\n\n      children.push(\n        list(bulletBuffer, false)\n      );\n\n      bulletBuffer = [];\n    }\n\n    if (numberedBuffer.length > 0) {\n\n      children.push(\n        list(numberedBuffer, true)\n      );\n\n      numberedBuffer = [];\n    }\n\n  }\n\n\n  for (const originalLine of lines) {\n\n    const line = originalLine.trim();\n\n\n    // Empty line\n    if (!line) {\n\n      flushParagraph();\n      flushLists();\n\n      continue;\n    }\n\n\n    // Horizontal rule\n    if (/^(-{3,}|\\*{3,}|_{3,})$/.test(line)) {\n\n      flushParagraph();\n      flushLists();\n\n      continue;\n    }\n\n\n    // H1\n    if (/^#\\s+/.test(line)) {\n\n      flushParagraph();\n      flushLists();\n\n      children.push(\n        heading(\n          line.replace(/^#\\s+/, \"\").trim(),\n          \"h1\"\n        )\n      );\n\n      continue;\n    }\n\n\n    // H2\n    if (/^##\\s+/.test(line)) {\n\n      flushParagraph();\n      flushLists();\n\n      children.push(\n        heading(\n          line.replace(/^##\\s+/, \"\").trim(),\n          \"h2\"\n        )\n      );\n\n      continue;\n    }\n\n\n    // H3\n    if (/^###\\s+/.test(line)) {\n\n      flushParagraph();\n      flushLists();\n\n      children.push(\n        heading(\n          line.replace(/^###\\s+/, \"\").trim(),\n          \"h3\"\n        )\n      );\n\n      continue;\n    }\n\n\n    // Bullet\n    const bulletMatch =\n      line.match(/^[-*+]\\s+(.+)$/);\n\n    if (bulletMatch) {\n\n      flushParagraph();\n\n      if (numberedBuffer.length > 0) {\n        flushLists();\n      }\n\n      bulletBuffer.push(\n        bulletMatch[1]\n      );\n\n      continue;\n    }\n\n\n    // Numbered list\n    const numberedMatch =\n      line.match(/^\\d+[.)]\\s+(.+)$/);\n\n    if (numberedMatch) {\n\n      flushParagraph();\n\n      if (bulletBuffer.length > 0) {\n        flushLists();\n      }\n\n      numberedBuffer.push(\n        numberedMatch[1]\n      );\n\n      continue;\n    }\n\n\n    // Normal paragraph\n    flushLists();\n\n    paragraphBuffer.push(line);\n  }\n\n\n  flushParagraph();\n  flushLists();\n\n\n  return children;\n}\n\n\n// ============================================================\n// 6. Build Lexical\n// ============================================================\n\nlet children = [];\n\n\n// ------------------------------------------------------------\n// JSON output\n// ------------------------------------------------------------\n\nif (blog.sections && Array.isArray(blog.sections)) {\n\n  if (blog.introduction) {\n    children.push(\n      paragraph(\n        blog.introduction.trim()\n      )\n    );\n  }\n\n\n  for (const section of blog.sections) {\n\n    if (section.heading) {\n\n      children.push(\n        heading(\n          section.heading.trim()\n        )\n      );\n\n    }\n\n    if (section.content) {\n\n      children.push(\n        paragraph(\n          section.content.trim()\n        )\n      );\n\n    }\n\n  }\n\n\n  if (\n    blog.key_takeaways &&\n    Array.isArray(blog.key_takeaways) &&\n    blog.key_takeaways.length > 0\n  ) {\n\n    children.push(\n      heading(\"Key Takeaways\")\n    );\n\n    children.push(\n      list(\n        blog.key_takeaways.map(\n          item => String(item)\n        ),\n        false\n      )\n    );\n\n  }\n\n\n  if (blog.conclusion) {\n\n    children.push(\n      heading(\"Conclusion\")\n    );\n\n    children.push(\n      paragraph(\n        blog.conclusion.trim()\n      )\n    );\n\n  }\n\n}\n\n\n// ------------------------------------------------------------\n// Markdown/plain-text output\n// ------------------------------------------------------------\n\nelse {\n\n  children = markdownToLexical(\n    blog.markdown\n  );\n\n}\n\n\n// ============================================================\n// 7. Ghost Lexical object\n// ============================================================\n\nconst lexical = {\n\n  root: {\n    children,\n    direction: \"ltr\",\n    format: \"\",\n    indent: 0,\n    type: \"root\",\n    version: 1\n  }\n\n};\n\n\n// ============================================================\n// 8. Ghost payload\n// ============================================================\n\nreturn [\n  {\n    json: {\n      posts: [\n        {\n          title : blog.title,\n          slug : blog.slug || createSlug(blog.title),\n          lexical : JSON.stringify(lexical),\n          status : \"published\"\n        }\n      ]\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        -160
+      ],
+      "id": "8c01d83d-de2a-4a3a-95e8-8649446a0380",
+      "name": "Data",
+      "retryOnFail": false,
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst data = $('Data').first().json;\n// Put your Ghost Admin API key here\nconst ghostAdminKey =  $env.GHOST_ADMIN_API_KEY ;\n\n// Split the key into ID and secret\nconst [keyId, secret] = ghostAdminKey.split(':');\n\nif (!keyId || !secret) {\n  throw new Error('Invalid Ghost Admin API key. Expected ID:SECRET');\n}\n\n// Base64URL encoder\nfunction base64url(input) {\n  return Buffer.from(input)\n    .toString('base64')\n    .replace(/=/g, '')\n    .replace(/\\+/g, '-')\n    .replace(/\\//g, '_');\n}\n\n// Current Unix timestamp\nconst now = Math.floor(Date.now() / 1000);\n\n// JWT header\nconst header = {\n  alg: 'HS256',\n  typ: 'JWT',\n  kid: keyId,\n};\n\n// JWT payload\nconst payload = {\n  iat: now,\n  exp: now + 300,\n  aud: '/admin/',\n};\n\n// Encode header + payload\nconst encodedHeader = base64url(JSON.stringify(header));\nconst encodedPayload = base64url(JSON.stringify(payload));\n\nconst unsignedToken = `${encodedHeader}.${encodedPayload}`;\n\n// Sign using Ghost's hexadecimal secret\nconst signature = crypto\n  .createHmac('sha256', Buffer.from(secret, 'hex'))\n  .update(unsignedToken)\n  .digest();\n\nconst encodedSignature = base64url(signature);\n\n// Final JWT\nconst token = `${unsignedToken}.${encodedSignature}`;\n\n// Return token for the next node\nreturn [\n  {\n    json: {\n      ...data,\n      token\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -384,
+        -160
+      ],
+      "id": "8828725e-6e00-4165-a148-2258d3dce413",
+      "name": "token_generator"
+    },
+    {
+      "parameters": {
+        "resource": "block",
+        "operation": "getAll",
+        "blockId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "fetchNestedBlocks": true
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -1920,
+        -160
+      ],
+      "id": "f74a99c6-db59-4003-87c3-bc15ec64db12",
+      "name": "page",
+      "credentials": {
+        "notionApi": {
+          "id": "pXAV2nJOYvPFucr7",
+          "name": "Blog management"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Notion Page content persing\n- **Add a page on Notion database** The page content is grabbed the the notion page node.\n- **Content Perser** JavaScript code node will extract page contents to make it readable for AI agent",
+        "height": 432,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2016,
+        -400
+      ],
+      "id": "31d1edb4-db30-496e-b457-00273ad653fe",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Blog Writer Agent\n- Uses the Gemini 2.5 Flash model as the primary model for blog writing.",
+        "height": 608,
+        "width": 528,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1360,
+        -384
+      ],
+      "id": "8dd82944-f076-40e8-a3f3-70c56304d325",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Ghost Payload Maker & Token Generator\n- The Data node returns the payload for the Ghost API.\n- The token generator node generates a token for the JWT Autentication\n- Finally sends the payload and token to the Ghost API.",
+        "height": 384,
+        "width": 528,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        -320
+      ],
+      "id": "05b6d000-6a27-4065-9358-f434a53ec62a",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1120,
+        96
+      ],
+      "id": "6cdfa768-d1f5-405a-9d2a-6e2303275621",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "97jNomG1j4V69TY7",
+          "name": "OpenAi account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Notion Trigger": {
+      "main": [
+        [
+          {
+            "node": "page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Blog Writer Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        []
+      ]
+    },
+    "Blog Writer Agent": {
+      "main": [
+        [
+          {
+            "node": "Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Note Perser": {
+      "main": [
+        [
+          {
+            "node": "Blog Writer Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data": {
+      "main": [
+        [
+          {
+            "node": "token_generator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "token_generator": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "page": {
+      "main": [
+        [
+          {
+            "node": "Note Perser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Blog Writer Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "597860b8-aeed-4d7f-a468-9d5f5c7d61a4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4e8cbaee991bb1c877738ce9f9a3dffa77d80ec862c2d375000d5f4b06cfb748"
+  },
+  "id": "TWpBcJtgZkWAsRQs",
+  "tags": []
+}
