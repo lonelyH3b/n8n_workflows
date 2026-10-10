@@ -1,8 +1,11 @@
 # Notion-to-Blog n8n Workflow Setup
 
-![Notion-to-Blog n8n Workflow](media/workflow_img.png)
+[![Notion-to-Blog n8n Workflow](media/workflow_img.png)](https://youtu.be/7Ez6FpewgMk)
 
 This guide explains how to set up and run the **Notion-to-Blog automation workflow** using Docker Compose. The workflow triggers when a new page is added to a Notion database, uses AI to convert the note into a professional blog post, and publishes it to a Ghost CMS blog.
+
+**Workflow Detail:** https://contra.com/products/UIJyKkgj-write-and-publish-notion-blog-posts-to-ghost-with-gemini-and-gpt
+
 
 ## How it works
 
